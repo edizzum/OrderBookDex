@@ -5,8 +5,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract OrderBookDEX is ReentrancyGuard {
+    //10**18 lerin çarpılması noktalarını kontrol et
 
-    IERC20 public hncToken;
+    IERC20 public hncToken; 
     uint256 public tradingFee;
     address public owner;
     uint256 nextOrderId = 1;
@@ -51,7 +52,7 @@ contract OrderBookDEX is ReentrancyGuard {
     }
 
     function setTradingFee(uint256 _fee) external onlyOwner {
-        tradingFee = _fee;
+        tradingFee = _fee; // _fee = 100 => 100/10000 => %1
     }
 
     //////////////////// Deposit - Withdraw Functions ////////////////////
@@ -87,14 +88,18 @@ contract OrderBookDEX is ReentrancyGuard {
         emit Withdrawal(owner, _amountOfEther, "ETH");
     }
 
-    //////////////////// Limit Order Functions ////////////////////
+    //////////////////// Limit Order Functions ////////////////////1800
 
     function createLimitOrder(TradeType _tradeType, uint256 _amount, uint256 _price) external {
         if (_tradeType == TradeType.Buy) {
-            require(ethBalances[msg.sender] >= _amount * _price, "Insufficient ETH balance");
-            uint256 tradeCost = _amount * _price;
+            require(_amount > 0, "Amount must be greater than 0");
+            require(_price > 0, "ETH price must be greater than 0");
+            require(ethBalances[msg.sender] >= (_amount * _price)/10**18, "Insufficient ETH balance");
+            uint256 tradeCost = (_amount * _price)/10**18;
             ethBalances[msg.sender] -= tradeCost;
         } else {
+            require(_amount > 0, "Amount must be greater than 0");
+            require(_price > 0, "ETH price must be greater than 0");
             require(hncBalances[msg.sender] >= _amount, "Insufficient HNC balance");
             hncBalances[msg.sender] -= _amount;
         }
@@ -120,7 +125,7 @@ contract OrderBookDEX is ReentrancyGuard {
     function matchOrder(Order memory newOrder) internal returns (bool) {
         for (uint256 i = 0; i < activeOrders.length; i++) {
             Order storage existingOrder = activeOrders[i];
-            if (existingOrder.tradeType != newOrder.tradeType && existingOrder.price == newOrder.price && existingOrder.amount >= newOrder.amount) {
+            if (existingOrder.tradeType != newOrder.tradeType && existingOrder.price == newOrder.price) {
                 executeTrade(existingOrder, newOrder);
                 return true;
             }
@@ -129,48 +134,41 @@ contract OrderBookDEX is ReentrancyGuard {
     }
 
     function executeTrade(Order storage matchedOrder, Order memory newOrder) internal {
-        uint256 tradeAmount = newOrder.amount;
-        if (matchedOrder.amount < newOrder.amount) {
-            tradeAmount = matchedOrder.amount;
-        }
-
-        uint256 tradeCost = tradeAmount * newOrder.price;
+        uint256 tradeAmount = matchedOrder.amount < newOrder.amount ? matchedOrder.amount : newOrder.amount;
+        uint256 tradeCost = (tradeAmount * newOrder.price)/10**18;
         uint256 feeAmount = (tradeCost * tradingFee) / 10000;
 
         if (newOrder.tradeType == TradeType.Buy) {
-            require(ethBalances[newOrder.trader] >= tradeCost, "Buyer has insufficient ETH");
-            ethBalances[newOrder.trader] -= tradeCost;
             ethBalances[owner] += feeAmount;
             ethBalances[matchedOrder.trader] += tradeCost - feeAmount;
-            hncBalances[matchedOrder.trader] -= tradeAmount;
             hncBalances[newOrder.trader] += tradeAmount;
         } else {
-            require(ethBalances[matchedOrder.trader] >= tradeCost, "Buyer has insufficient ETH");
-            ethBalances[matchedOrder.trader] -= tradeCost;
             ethBalances[owner] += feeAmount;
             ethBalances[newOrder.trader] += tradeCost - feeAmount;
-            hncBalances[newOrder.trader] -= tradeAmount;
+            ethBalances[matchedOrder.trader] -= tradeCost;
             hncBalances[matchedOrder.trader] += tradeAmount;
         }
 
         matchedOrder.amount -= tradeAmount;
         newOrder.amount -= tradeAmount;
 
+        // Remove or update the matched order
         if (matchedOrder.amount == 0) {
             removeOrderFromArray(matchedOrder);
         } else {
             matchedOrder.isActive = true;
         }
 
+        // Remove or update the new order
         if (newOrder.amount == 0) {
             removeOrderFromArray(newOrder);
+        } else {
+            // Add the partially fulfilled new order to activeOrders
+            newOrder.isActive = true;
+            activeOrders.push(newOrder);
         }
 
-        if (newOrder.tradeType == TradeType.Buy) {
-            emit LimitTradeExecuted(newOrder.trader, matchedOrder.trader, tradeAmount, newOrder.price);
-        } else {
-            emit LimitTradeExecuted(matchedOrder.trader, newOrder.trader, tradeAmount, newOrder.price);
-        }
+        emit LimitTradeExecuted(newOrder.trader, matchedOrder.trader, tradeAmount, newOrder.price);
     }
 
     //////////////////// Market Order Functions ////////////////////
@@ -286,13 +284,41 @@ contract OrderBookDEX is ReentrancyGuard {
 
         Order memory activeOrder = activeOrders[orderId];
         if (activeOrder.tradeType == TradeType.Buy) {
-            ethBalances[msg.sender] += activeOrder.amount * activeOrder.price;
+            ethBalances[msg.sender] += (activeOrder.amount * activeOrder.price)/10**18;
         } else {
             hncBalances[msg.sender] += activeOrder.amount;
         }
 
         removeOrderFromArray(activeOrder);
         emit OrderCancelled(activeOrder);
+    }
+
+    function getOrders() external view returns (Order[] memory) {
+        return activeOrders;
+    }
+
+    function getActiveOrdersByUser(address user) external view returns (Order[] memory) {
+        uint256 orderCount = 0;
+        // First, count the number of orders for the user
+        for (uint256 i = 0; i < activeOrders.length; i++) {
+            if (activeOrders[i].trader == user) {
+                orderCount++;
+            }
+        }
+
+        // Create an array to hold the orders
+        Order[] memory ordersForUser = new Order[](orderCount);
+
+        // Populate the array with the user's orders
+        uint256 counter = 0;
+        for (uint256 i = 0; i < activeOrders.length; i++) {
+            if (activeOrders[i].trader == user) {
+                ordersForUser[counter] = activeOrders[i];
+                counter++;
+            }
+        }
+
+        return ordersForUser;
     }
 
     function removeOrderFromArray(Order memory aboutToRemoveOrder) internal {
