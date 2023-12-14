@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 contract OrderBookDEX is ReentrancyGuard {
-    //10**18 lerin çarpılması noktalarını kontrol et
 
     IERC20 public hncToken; 
     uint256 public tradingFee;
@@ -57,12 +56,12 @@ contract OrderBookDEX is ReentrancyGuard {
 
     //////////////////// Deposit - Withdraw Functions ////////////////////
 
-    function depositETH() external payable {
+    function depositETH() external payable nonReentrant {
         require(msg.value != 0, "No value is given!");
         ethBalances[msg.sender] += msg.value;
     }
 
-    function depositHNC(uint256 _amount) external {
+    function depositHNC(uint256 _amount) external nonReentrant {
         require(hncToken.transferFrom(msg.sender, address(this), _amount), "HNC transfer failed");
         hncBalances[msg.sender] += _amount;
     }
