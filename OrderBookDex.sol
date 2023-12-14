@@ -209,7 +209,7 @@ contract OrderBookDEX is ReentrancyGuard {
 
             Order storage closestOrder = activeOrders[closestOrderIndex];
             tradeAmount = (remainingAmount > closestOrder.amount) ? closestOrder.amount : remainingAmount;
-            tradeCost = tradeAmount * closestOrder.price;
+            tradeCost = (tradeAmount * closestOrder.price)/10**18;
 
             require(ethBalances[msg.sender] >= tradeCost, "Insufficient ETH for trade");
 
@@ -256,7 +256,7 @@ contract OrderBookDEX is ReentrancyGuard {
 
             Order storage closestOrder = activeOrders[closestOrderIndex];
             tradeAmount = (remainingAmount > closestOrder.amount) ? closestOrder.amount : remainingAmount;
-            tradeCost = tradeAmount * closestOrder.price;
+            tradeCost = (tradeAmount * closestOrder.price)/10**18;
 
             require(ethBalances[closestOrder.trader] >= tradeCost, "Buyer has insufficient ETH");
 
