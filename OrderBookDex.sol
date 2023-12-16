@@ -219,6 +219,7 @@ contract OrderBookDEX is ReentrancyGuard {
 
             closestOrder.amount -= tradeAmount;
             hncBalances[msg.sender] += tradeAmount;
+            hncBalances[closestOrder.trader] += tradeAmount;
             remainingAmount -= tradeAmount;
             totalCost += tradeCost;
 
@@ -266,6 +267,7 @@ contract OrderBookDEX is ReentrancyGuard {
 
             closestOrder.amount -= tradeAmount;
             hncBalances[msg.sender] -= tradeAmount;
+            hncBalances[closestOrder.trader] += tradeAmount;
             remainingAmount -= tradeAmount;
 
             emit MarketTradeExecuted(closestOrder.trader, msg.sender, tradeAmount, closestOrder.price);
